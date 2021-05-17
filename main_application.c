@@ -28,7 +28,7 @@ void SerialReceive_Task(void* pvParameters);
 void vApplicationIdleHook(void);
 
 /* TRASNMISSION DATA - CONSTANT IN THIS APPLICATION */
-const char trigger[] = "Neka poruka\n";
+const char trigger[] = "Pozdrav svima\n";
 unsigned volatile t_point;
 
 /* RECEPTION DATA BUFFER */
