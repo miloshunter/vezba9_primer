@@ -80,7 +80,7 @@ void led_bar_tsk(void* pvParams) {
 		get_LED_BAR(5, &tmp);
 
 
-		configASSERT(!set_LED_BAR(1, ~tmp));
+		configASSERT(!set_LED_BAR(2, ~tmp));
 	}
 }
 
