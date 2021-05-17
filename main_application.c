@@ -148,7 +148,7 @@ void SerialSend_Task(void* pvParameters)
 		send_serial_character(COM_CH, trigger[t_point++]);
 		send_serial_character(COM_CH, trigger[t_point++]);
 		//xSemaphoreTake(TBE_BinarySemaphore, portMAX_DELAY);// kada se koristi predajni interapt
-		vTaskDelay(pdMS_TO_TICKS(200); // kada se koristi vremenski delay }
+		vTaskDelay(pdMS_TO_TICKS(200)); // kada se koristi vremenski delay }
 	}
 }
 
