@@ -28,7 +28,7 @@ void SerialReceive_Task(void* pvParameters);
 void vApplicationIdleHook(void);
 
 /* TRASNMISSION DATA - CONSTANT IN THIS APPLICATION */
-const char trigger[] = "Neka poruka\n";
+const char trigger[] = "Pozdrav svima\n";
 unsigned volatile t_point;
 
 /* RECEPTION DATA BUFFER */
@@ -146,8 +146,9 @@ void SerialSend_Task(void* pvParameters)
 		if (t_point > (sizeof(trigger) - 1))
 			t_point = 0;
 		send_serial_character(COM_CH, trigger[t_point++]);
+		send_serial_character(COM_CH, trigger[t_point++]);
 		//xSemaphoreTake(TBE_BinarySemaphore, portMAX_DELAY);// kada se koristi predajni interapt
-		vTaskDelay(pdMS_TO_TICKS(100)); // kada se koristi vremenski delay }
+		vTaskDelay(pdMS_TO_TICKS(200)); // kada se koristi vremenski delay }
 	}
 }
 
