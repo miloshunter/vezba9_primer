@@ -21,9 +21,18 @@
 #define	SERVICE_TASK_PRI		(1+ tskIDLE_PRIORITY )
 
 /* TASKS: FORWARD DECLARATIONS */
+void prvSerialReceiveTask_0(void* pvParameters);
+void prvSerialReceiveTask_1(void* pvParameters);
+
+SemaphoreHandle_t RXC_BS_0, RXC_BS_1;
+
+/* SERIAL SIMULATOR CHANNEL TO USE */
+#define COM_CH_0 (0)
+#define COM_CH_1 (1)
+
+/* TASKS: FORWARD DECLARATIONS */
 void led_bar_tsk(void* pvParameters);
 void SerialSend_Task(void* pvParameters);
-void SerialReceive_Task(void* pvParameters);
 
 void vApplicationIdleHook(void);
 
@@ -57,13 +66,18 @@ uint32_t OnLED_ChangeInterrupt() {
 	portYIELD_FROM_ISR(higherPriorityTaskWoken);
 }
 
-uint32_t prvProcessRXCInterrupt() {
-	// Ovo se desi kad stigne nesto sa serijske
-	BaseType_t higherPriorityTaskWoken = pdFALSE;
+/* RXC - RECEPTION COMPLETE - INTERRUPT HANDLER */
+static uint32_t prvProcessRXCInterrupt(void)
+{
+	BaseType_t xHigherPTW = pdFALSE;
 
-	xSemaphoreGiveFromISR(RXC_BinarySemaphore, &higherPriorityTaskWoken);
+	if (get_RXC_status(0) != 0)
+		xSemaphoreGiveFromISR(RXC_BS_0, &xHigherPTW);
 
-	portYIELD_FROM_ISR(higherPriorityTaskWoken);
+	if (get_RXC_status(1) != 0)
+		xSemaphoreGiveFromISR(RXC_BS_1, &xHigherPTW);
+
+	portYIELD_FROM_ISR(xHigherPTW);
 }
 
 
@@ -84,48 +98,37 @@ void led_bar_tsk(void* pvParams) {
 	}
 }
 
-void SerialReceive_Task(void* pvParameters)
+void prvSerialReceiveTask_0(void* pvParameters)
 {
-	configASSERT(pvParameters);
 	uint8_t cc = 0;
-	static uint8_t count = 0;
-	for (;;)
+
+	while (1)
 	{
-		xSemaphoreTake(RXC_BinarySemaphore, portMAX_DELAY);// ceka na serijski prijemni interapt
-		get_serial_character(COM_CH, &cc);//ucitava primljeni karakter u promenjivu cc
-		//printf("primio karakter: %u\n", (unsigned)cc);// prikazuje primljeni karakter u cmd prompt
-		if (cc == 0x00) // ako je primljen karakter 0, inkrementira se vrednost u GEX formatu na 
-		 //ciframa 5 i 6
-		{
-			r_point = 0;
-			count++;
-			select_7seg_digit(5);
-			set_7seg_digit(hexnum[count >> 4]);
-			select_7seg_digit(6);
-			set_7seg_digit(hexnum[count & 0x0F]);
-		}
-		else if (cc == 0xff)// za svaki KRAJ poruke, prikazati primljenje bajtove direktno na 
-		 //displeju 3-4
-		{
-			configASSERT(select_7seg_digit(3));
-			configASSERT(set_7seg_digit(hexnum[r_buffer[0]]));
-			configASSERT(select_7seg_digit(4));
-			configASSERT(set_7seg_digit(hexnum[r_buffer[1]]));
+		xSemaphoreTake(RXC_BS_0, portMAX_DELAY);
+		get_serial_character(COM_CH_0, &cc);
+		printf("Kanal 0: %c\n", cc);
+		select_7seg_digit(2);
+		set_7seg_digit(hexnum[cc >> 4]);
+		select_7seg_digit(3);
+		set_7seg_digit(hexnum[cc & 0x0F]);
+		send_serial_character(COM_CH_0, cc + 2);
+	}
+}
 
-			
-		}
-		else if (r_point < R_BUF_SIZE)// pamti karaktere izmedju 0 i FF
-		{
-			r_buffer[r_point++] = cc;
-		}
+void prvSerialReceiveTask_1(void* pvParameters)
+{
+	uint8_t cc = 0;
 
-		for (size_t i = 0; i < 10000; i++)
-		{
-			for (size_t j = 0; j < 10000; j++)
-			{
-				i = i;
-			}
-		}
+	while (1)
+	{
+		xSemaphoreTake(RXC_BS_1, portMAX_DELAY);
+		get_serial_character(COM_CH_1, &cc);
+		printf("Kanal 1: %c\n", cc);
+		select_7seg_digit(0);
+		set_7seg_digit(hexnum[cc >> 4]);
+		select_7seg_digit(1);
+		set_7seg_digit(hexnum[cc & 0x0F]);
+		send_serial_character(COM_CH_1, cc + 1);
 	}
 }
 
@@ -135,18 +138,12 @@ void SerialSend_Task(void* pvParameters)
 	t_point = 0;
 	for (;;)
 	{
-		for (size_t i = 0; i < 10000; i++)
-		{
-			for (size_t j = 0; j < 10000; j++)
-			{
-				i = i;
-			}
-		}
-
+		
 		if (t_point > (sizeof(trigger) - 1))
 			t_point = 0;
-		send_serial_character(COM_CH, trigger[t_point++]);
-		send_serial_character(COM_CH, trigger[t_point++]);
+		send_serial_character(0, trigger[t_point]);
+		vTaskDelay(10);
+		send_serial_character(1, trigger[t_point++]+1);
 		//xSemaphoreTake(TBE_BinarySemaphore, portMAX_DELAY);// kada se koristi predajni interapt
 		vTaskDelay(pdMS_TO_TICKS(200)); // kada se koristi vremenski delay }
 	}
@@ -215,10 +212,13 @@ void main_demo(void)
 	configASSERT(init_LED_comm() == 0);
 	init_serial_uplink(COM_CH); // inicijalizacija serijske TX na kanalu 0
 	init_serial_downlink(COM_CH);// inicijalizacija serijske RX na kanalu 0
+	init_serial_uplink(1); // inicijalizacija serijske TX na kanalu 0
+	init_serial_downlink(1);// ini
+	
 	init_7seg_comm();
 
 	/* ON INPUT CHANGE INTERRUPT HANDLER */
-	vPortSetInterruptHandler(portINTERRUPT_SRL_OIC, OnLED_ChangeInterrupt);
+	//vPortSetInterruptHandler(portINTERRUPT_SRL_OIC, OnLED_ChangeInterrupt);
 	/* SERIAL RECEPTION INTERRUPT HANDLER */
 	vPortSetInterruptHandler(portINTERRUPT_SRL_RXC, prvProcessRXCInterrupt);
 
@@ -229,7 +229,13 @@ void main_demo(void)
 	configASSERT(xTaskCreate(led_bar_tsk, "ST", configMINIMAL_STACK_SIZE, (void*)1, SERVICE_TASK_PRI, NULL));
 
 	/* SERIAL RECEIVER TASK */
-	configASSERT(xTaskCreate(SerialReceive_Task, "SRx", configMINIMAL_STACK_SIZE, (void*)1, TASK_SERIAL_REC_PRI, NULL));
+	xTaskCreate(prvSerialReceiveTask_0, "SR0", configMINIMAL_STACK_SIZE, NULL, TASK_SERIAL_REC_PRI, NULL);
+
+	/* SERIAL RECEIVER TASK */
+	xTaskCreate(prvSerialReceiveTask_1, "SR1", configMINIMAL_STACK_SIZE, NULL, TASK_SERIAL_REC_PRI, NULL);
+	/* Create TBE semaphores - serial transmit comm */
+	RXC_BS_0 = xSemaphoreCreateBinary();
+	RXC_BS_1 = xSemaphoreCreateBinary();
 	r_point = 0;
 	/* SERIAL TRANSMITTER TASK */
 	configASSERT(xTaskCreate(SerialSend_Task, "STx", configMINIMAL_STACK_SIZE, (void*)1, TASK_SERIAL_SEND_PRI, NULL));
